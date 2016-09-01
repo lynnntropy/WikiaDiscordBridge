@@ -254,14 +254,26 @@ namespace WikiaDiscordBridge
 
         static string ParseClientSideMessageMarkup(string message)
         {
+            string processedMessage = message;
+
             if (message.StartsWith("/me"))
             {
-                return "*" + message.Substring(4) + "*";
+                processedMessage = "*" + processedMessage.Substring(4) + "*";
             }
-            else
+
+            if (Regex.IsMatch(message, @"\[\[.+\]\]"))
             {
-                return message;
+                processedMessage = Regex.Replace(processedMessage, @"\[\[(.+?)\]\]", delegate (Match match)
+                {
+                    string resourceName = match.Groups[1].Value;
+                    resourceName = resourceName.Replace(" ", "_");
+                    resourceName = Uri.EscapeUriString(resourceName);
+
+                    return $"http://swordartonline.wikia.com/wiki/{resourceName}";
+                });
             }
+
+            return processedMessage;
         }
     }
 }
