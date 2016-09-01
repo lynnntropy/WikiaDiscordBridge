@@ -8,6 +8,7 @@ using RestSharp;
 using Newtonsoft.Json;
 
 using System.Threading;
+using System.Text.RegularExpressions;
 
 namespace WikiaDiscordBridge
 {
@@ -132,8 +133,16 @@ namespace WikiaDiscordBridge
 
         public static void SendMessage(string message)
         {
-            Console.WriteLine($"Sending: \"{message}\"");
-            string requestBody = EncodeToRetardedFormat(@"42[""message"",""{\""id\"":null,\""cid\"":\""c2079\"",\""attrs\"":{\""msgType\"":\""chat\"",\""roomId\"":\""" + ChatRoomData["roomId"] +@"\"",\""name\"":\""" + BotName + @"\"",\""text\"":\""" + message + @"\"",\""avatarSrc\"":\""\"",\""timeStamp\"":\""\"",\""continued\"":false,\""temp\"":false}}""]");
+            // Escape newlines, as this is the format Wikia expects to see.
+            var cleanMessage = message
+                .Replace(Environment.NewLine, @"\\n")
+                .Replace("\n", @"\\n");
+
+            // Remove emoji, as Wikia doesn't support them (usually, connection instantly breaks)
+            cleanMessage = Regex.Replace(cleanMessage, @"\p{Cs}", "?");
+
+            Console.WriteLine($"Sending: \"{cleanMessage}\"");
+            string requestBody = EncodeToRetardedFormat(@"42[""message"",""{\""id\"":null,\""cid\"":\""c2079\"",\""attrs\"":{\""msgType\"":\""chat\"",\""roomId\"":\""" + ChatRoomData["roomId"] +@"\"",\""name\"":\""" + BotName + @"\"",\""text\"":\""" + cleanMessage + @"\"",\""avatarSrc\"":\""\"",\""timeStamp\"":\""\"",\""continued\"":false,\""temp\"":false}}""]");
 
             var request = new RestRequest($"/socket.io/", Method.POST);
             request.AddParameter("text/plain;charset=UTF-8", requestBody, ParameterType.RequestBody);
@@ -177,6 +186,8 @@ namespace WikiaDiscordBridge
                 {
                     Console.WriteLine("Error: Server returned 'session ID unknown'.");
                     Console.WriteLine($"Response content is:\n{response.Content}");
+
+                    WikiaDiscordBridge.Restart();
                 }
                 else if (response.Content.Length > 20)
                 {
@@ -208,28 +219,48 @@ namespace WikiaDiscordBridge
         {
             if (((string)dataObject["attrs"]["name"]).ToLower() != BotName.ToLower())
             {
+                var name = (string) dataObject["attrs"]["name"];
+
+                string text = "";
+                if (dataObject["attrs"]["text"] != null)
+                {
+                    text = ParseClientSideMessageMarkup((string)dataObject["attrs"]["text"]);
+                }
+
                 switch ((string)responseObject[1]["event"])
                 {
                     case "chat:add":
-                        Console.WriteLine($"{dataObject["attrs"]["name"]}: {dataObject["attrs"]["text"]}");
-                        DiscordSession.SendMessage($"**{dataObject["attrs"]["name"]}**: {dataObject["attrs"]["text"]}");
+                        Console.WriteLine($"{name}: {text}");
+                        DiscordSession.SendMessage($"**{name}**: {text}");
                         break;
 
                     case "join":
-                        Console.WriteLine($"{dataObject["attrs"]["name"]} has joined the chat.");
-                        DiscordSession.SendMessage($"**{dataObject["attrs"]["name"]}** has joined the chat.");
+                        Console.WriteLine($"{name} has joined the chat.");
+                        DiscordSession.SendMessage($"**{name}** has joined the chat.");
                         break;
 
                     case "logout":
-                        Console.WriteLine($"{dataObject["attrs"]["name"]} has left the chat.");
-                        DiscordSession.SendMessage($"**{dataObject["attrs"]["name"]}** has left the chat.");
+                        Console.WriteLine($"{name} has left the chat.");
+                        DiscordSession.SendMessage($"**{name}** has left the chat.");
                         break;
 
                     case "part":
-                        Console.WriteLine($"{dataObject["attrs"]["name"]} has left the chat.");
-                        DiscordSession.SendMessage($"**{dataObject["attrs"]["name"]}** has left the chat.");
+                        Console.WriteLine($"{name} has left the chat.");
+                        DiscordSession.SendMessage($"**{name}** has left the chat.");
                         break;
                 }
+            }
+        }
+
+        static string ParseClientSideMessageMarkup(string message)
+        {
+            if (message.StartsWith("/me"))
+            {
+                return "*" + message.Substring(4) + "*";
+            }
+            else
+            {
+                return message;
             }
         }
     }

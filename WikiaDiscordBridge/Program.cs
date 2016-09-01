@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -35,6 +36,8 @@ namespace WikiaDiscordBridge
                     Console.WriteLine(e.ToString());
                 }
 
+                // DiscordSession.Connect();
+
             }).Start();
 
             new Thread(() =>
@@ -49,8 +52,16 @@ namespace WikiaDiscordBridge
                     Console.WriteLine(e.ToString());
                 }
 
+                //WikiaSession.GetChatInfo();
+                //WikiaSession.ConnectToChat();
+
             }).Start();
         }
 
+        public static void Restart()
+        {
+            System.Diagnostics.Process.Start(Assembly.GetExecutingAssembly().Location);
+            Environment.Exit(0);
+        }
     }
 }

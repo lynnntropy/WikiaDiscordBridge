@@ -63,14 +63,7 @@ namespace WikiaDiscordBridge
 
         public static void SendMessage(string message)
         {
-            try
-            {
-                TrackedChannel.SendMessage(message);
-            }
-            catch (Exception e)
-            {
-
-            }
+           TrackedChannel.SendMessage(message);
         }
     }
 }
