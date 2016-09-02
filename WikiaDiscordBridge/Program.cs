@@ -11,8 +11,7 @@ using System.Threading.Tasks;
 namespace WikiaDiscordBridge
 {
     class WikiaDiscordBridge
-    {
-        
+    {        
         public static dynamic Config;
 
         static void Main(string[] args)
@@ -20,7 +19,7 @@ namespace WikiaDiscordBridge
             using (var streamReader = new StreamReader("config.yaml"))
             {
                 var deserializer = new YamlDotNet.Serialization.Deserializer();
-                WikiaDiscordBridge.Config = deserializer.Deserialize(streamReader);
+                Config = deserializer.Deserialize(streamReader);
                                 
                 Console.WriteLine("Successfully loaded configuration.");
             }
@@ -36,8 +35,6 @@ namespace WikiaDiscordBridge
                     Console.WriteLine(e.ToString());
                 }
 
-                // DiscordSession.Connect();
-
             }).Start();
 
             new Thread(() =>
@@ -51,9 +48,6 @@ namespace WikiaDiscordBridge
                 {
                     Console.WriteLine(e.ToString());
                 }
-
-                //WikiaSession.GetChatInfo();
-                //WikiaSession.ConnectToChat();
 
             }).Start();
         }

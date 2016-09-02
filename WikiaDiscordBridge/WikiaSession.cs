@@ -26,6 +26,7 @@ namespace WikiaDiscordBridge
 
         static string BotName;
 
+        static Thread PingThread;
 
         static void Login()
         {
@@ -138,7 +139,7 @@ namespace WikiaDiscordBridge
                 .Replace(Environment.NewLine, @"\\n")
                 .Replace("\n", @"\\n");
 
-            // Remove emoji, as Wikia doesn't support them (usually, connection instantly breaks)
+            // Remove emoji, as Wikia doesn't support them (connection instantly breaks)
             cleanMessage = Regex.Replace(cleanMessage, @"\p{Cs}", "?");
 
             Console.WriteLine($"Sending: \"{cleanMessage}\"");
@@ -154,7 +155,7 @@ namespace WikiaDiscordBridge
 
         static void PingContinuously()
         {
-            new Thread(() =>
+            PingThread = new Thread(() =>
             {
                 Thread.CurrentThread.IsBackground = true;
 
@@ -164,7 +165,9 @@ namespace WikiaDiscordBridge
                     Thread.Sleep(10000);
                 }
 
-            }).Start();
+            });
+
+            PingThread.Start();
         }
 
         public static void ConnectToChat()
@@ -184,14 +187,12 @@ namespace WikiaDiscordBridge
                 
                 if (response.Content.Contains("Session ID unknown"))
                 {
-                    Console.WriteLine("Error: Server returned 'session ID unknown'.");
-                    Console.WriteLine($"Response content is:\n{response.Content}");
-
-                    WikiaDiscordBridge.Restart();
+                    Console.WriteLine("Server returned 'session ID unknown'. Reconnecting.");
+                    new Thread(() => { Restart(); }).Start();
+                    break;
                 }
                 else if (response.Content.Length > 20)
                 {
-
                     var responseString = response.Content;
 
                     if (responseString.Contains("[\"message\""))
@@ -274,6 +275,23 @@ namespace WikiaDiscordBridge
             }
 
             return processedMessage;
+        }
+
+        static void Restart()
+        {
+            PingThread.Abort();
+
+            SharedCookieContainer = new System.Net.CookieContainer();
+
+            LoginRestClient.BaseUrl = new Uri($"http://{WikiaDiscordBridge.Config["wikia_name"]}.wikia.com");
+            ChatRestClient.BaseUrl = new Uri($"http://{WikiaDiscordBridge.Config["wikia_name"]}.wikia.com");
+            PingRestClient.BaseUrl = new Uri($"http://{WikiaDiscordBridge.Config["wikia_name"]}.wikia.com");
+
+            ChatRoomData = new Dictionary<string, string>();
+            ChatHeaders = new Dictionary<string, string>();
+
+            GetChatInfo();
+            ConnectToChat();
         }
     }
 }
