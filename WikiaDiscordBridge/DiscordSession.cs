@@ -25,7 +25,7 @@ namespace WikiaDiscordBridge
                 {
                     try
                     {
-                        await DiscordClient.Connect(WikiaDiscordBridge.Config["discord_bot_token"]);
+                        await DiscordClient.Connect(WikiaDiscordBridge.Config["discord_bot_token"], TokenType.Bot);
                         break;
                     }
                     catch (Exception ex)
@@ -47,13 +47,18 @@ namespace WikiaDiscordBridge
                     {
                         if (e.User.Id != DiscordClient.CurrentUser.Id)
                         {
+                            string displayName;
+
+                            if (e.User.Nickname != null && e.User.Nickname.Trim() != "") displayName = e.User.Nickname;
+                            else displayName = e.User.Name;
+
                             if (e.Message.Attachments.Count() > 0)
                             {
-                                WikiaSession.SendMessage($"{e.User.Name}: {e.Message.Attachments[0].Url}");
+                                WikiaSession.SendMessage($"{displayName}: {e.Message.Attachments[0].Url}");
                             }
                             else
                             {
-                                WikiaSession.SendMessage($"{e.User.Name}: {e.Message.Text}");
+                                WikiaSession.SendMessage($"{displayName}: {e.Message.Text}");
                             }
                         }
                     }

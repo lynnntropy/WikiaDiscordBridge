@@ -50,11 +50,21 @@ namespace WikiaDiscordBridge
                 }
 
             }).Start();
+
+            new Thread(() =>
+            {
+                int time = 1000 * 60 * int.Parse(Config["restart_timer"]);
+
+                Thread.Sleep(time);
+
+                Restart();
+
+            }).Start();
         }
 
         public static void Restart()
         {
-            System.Diagnostics.Process.Start(Assembly.GetExecutingAssembly().Location);
+            // System.Diagnostics.Process.Start(Assembly.GetExecutingAssembly().Location);
             Environment.Exit(0);
         }
     }

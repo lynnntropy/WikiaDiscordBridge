@@ -134,13 +134,18 @@ namespace WikiaDiscordBridge
 
         public static void SendMessage(string message)
         {
-            // Escape newlines, as this is the format Wikia expects to see.
-            var cleanMessage = message
-                .Replace(Environment.NewLine, @"\\n")
-                .Replace("\n", @"\\n");
+            var cleanMessage = message;
 
             // Remove emoji, as Wikia doesn't support them (connection instantly breaks)
-            cleanMessage = Regex.Replace(cleanMessage, @"\p{Cs}", "?");
+            // cleanMessage = Regex.Replace(cleanMessage, @"\p{Cs}", "?");
+            // cleanMessage = new string(Encoding.ASCII.GetChars(Encoding.ASCII.GetBytes(message)));
+            cleanMessage = new string(cleanMessage.Where(c => c <= sbyte.MaxValue).ToArray());
+
+            // Escape newlines and quotes.
+            cleanMessage = message
+                .Replace(Environment.NewLine, @"\\n")
+                .Replace("\n", @"\\n")
+                .Replace(@"""", @"\\\""");
 
             Console.WriteLine($"Sending: \"{cleanMessage}\"");
             string requestBody = EncodeToRetardedFormat(@"42[""message"",""{\""id\"":null,\""cid\"":\""c2079\"",\""attrs\"":{\""msgType\"":\""chat\"",\""roomId\"":\""" + ChatRoomData["roomId"] +@"\"",\""name\"":\""" + BotName + @"\"",\""text\"":\""" + cleanMessage + @"\"",\""avatarSrc\"":\""\"",\""timeStamp\"":\""\"",\""continued\"":false,\""temp\"":false}}""]");
@@ -188,7 +193,10 @@ namespace WikiaDiscordBridge
                 if (response.Content.Contains("Session ID unknown"))
                 {
                     Console.WriteLine("Server returned 'session ID unknown'. Reconnecting.");
-                    new Thread(() => { Restart(); }).Start();
+
+                    //new Thread(() => { Restart(); }).Start();
+                    WikiaDiscordBridge.Restart();
+
                     break;
                 }
                 else if (response.Content.Length > 20)
