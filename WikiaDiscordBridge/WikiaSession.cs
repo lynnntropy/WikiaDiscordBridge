@@ -134,18 +134,33 @@ namespace WikiaDiscordBridge
 
         public static void SendMessage(string message)
         {
-            var cleanMessage = message;
+            var cleanMessage = "";
 
-            // Remove emoji, as Wikia doesn't support them (connection instantly breaks)
-            // cleanMessage = Regex.Replace(cleanMessage, @"\p{Cs}", "?");
-            // cleanMessage = new string(Encoding.ASCII.GetChars(Encoding.ASCII.GetBytes(message)));
-            cleanMessage = new string(cleanMessage.Where(c => c <= sbyte.MaxValue).ToArray());
+            // Strip anything that isn't a printable ASCII character.
+            // ======
+            // Unfortunately, this is a necessary measure because the web chat
+            // encodes (or rather, garbles) Unicode characters in some format that 
+            // I couldn't manage to replicate. Not filtering results in Wikia immediately
+            // breaking your connection (depending on what the problematic character is).
 
-            // Escape newlines and quotes.
-            cleanMessage = message
+            foreach (char character in message)
+            {
+                if (character >= 32 && character <= 126)
+                {
+                    cleanMessage += character;
+                }
+                else
+                {
+                    cleanMessage += "?";
+                }
+            }
+
+            cleanMessage = cleanMessage
                 .Replace(Environment.NewLine, @"\\n")
                 .Replace("\n", @"\\n")
                 .Replace(@"""", @"\\\""");
+
+            // cleanMessage = Encoding.GetEncoding("iso-8859-1").GetString(Encoding.UTF8.GetBytes(cleanMessage));
 
             Console.WriteLine($"Sending: \"{cleanMessage}\"");
             string requestBody = EncodeToRetardedFormat(@"42[""message"",""{\""id\"":null,\""cid\"":\""c2079\"",\""attrs\"":{\""msgType\"":\""chat\"",\""roomId\"":\""" + ChatRoomData["roomId"] +@"\"",\""name\"":\""" + BotName + @"\"",\""text\"":\""" + cleanMessage + @"\"",\""avatarSrc\"":\""\"",\""timeStamp\"":\""\"",\""continued\"":false,\""temp\"":false}}""]");
