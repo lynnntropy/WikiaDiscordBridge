@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace WikiaDiscordBridge
@@ -59,6 +60,16 @@ namespace WikiaDiscordBridge
                             else
                             {
                                 WikiaSession.SendMessage($"{displayName}: {e.Message.Text}");
+
+                                if (Regex.IsMatch(e.Message.RawText, @"\[\[.+\]\]"))
+                                {
+                                    var match = Regex.Match(e.Message.RawText, @"\[\[(.+?)\]\]");
+                                    string resourceName = match.Groups[1].Value;
+                                    resourceName = resourceName.Replace(" ", "_");
+                                    resourceName = Uri.EscapeUriString(resourceName);
+
+                                    e.Channel.SendMessage($"<http://swordartonline.wikia.com/wiki/{resourceName}>");
+                                }
                             }
                         }
                     }

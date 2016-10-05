@@ -160,7 +160,9 @@ namespace WikiaDiscordBridge
                 .Replace("\n", @"\\n")
                 .Replace(@"""", @"\\\""");
 
-            // cleanMessage = Encoding.GetEncoding("iso-8859-1").GetString(Encoding.UTF8.GetBytes(cleanMessage));
+            //Console.WriteLine("Pre-re-encoding: " + cleanMessage);
+            // cleanMessage = Encoding.GetEncoding("iso-8859-9").GetString(Encoding.UTF8.GetBytes(cleanMessage));
+            //Console.WriteLine("Post-re-encoding: " + cleanMessage);
 
             Console.WriteLine($"Sending: \"{cleanMessage}\"");
             string requestBody = EncodeToRetardedFormat(@"42[""message"",""{\""id\"":null,\""cid\"":\""c2079\"",\""attrs\"":{\""msgType\"":\""chat\"",\""roomId\"":\""" + ChatRoomData["roomId"] +@"\"",\""name\"":\""" + BotName + @"\"",\""text\"":\""" + cleanMessage + @"\"",\""avatarSrc\"":\""\"",\""timeStamp\"":\""\"",\""continued\"":false,\""temp\"":false}}""]");
