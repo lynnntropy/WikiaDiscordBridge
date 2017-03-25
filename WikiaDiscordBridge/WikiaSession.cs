@@ -1,118 +1,114 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-
-using RestSharp;
-using Newtonsoft.Json;
-
+using System.Net.Http;
 using System.Threading;
 using System.Text.RegularExpressions;
+using Newtonsoft.Json;
 
 namespace WikiaDiscordBridge
 {
     class WikiaSession
     {
-        static System.Net.CookieContainer SharedCookieContainer = new System.Net.CookieContainer();
+        private static System.Net.CookieContainer sharedCookieContainer = new System.Net.CookieContainer();
+        private static readonly HttpClientHandler handler = new HttpClientHandler { CookieContainer = sharedCookieContainer };
+        
+        private static HttpClient loginHttpClient = new HttpClient(handler);
+        private static HttpClient chatHttpClient = new HttpClient(handler);
+        private static HttpClient pingHttpClient = new HttpClient(handler);
 
-        static RestClient LoginRestClient = new RestClient($"http://{WikiaDiscordBridge.Config["wikia_name"]}.wikia.com");
-        static RestClient ChatRestClient = new RestClient($"http://{WikiaDiscordBridge.Config["wikia_name"]}.wikia.com");
-        static RestClient PingRestClient = new RestClient($"http://{WikiaDiscordBridge.Config["wikia_name"]}.wikia.com");
+        static Dictionary<string, string> chatRoomData = new Dictionary<string, string>();
+        static Dictionary<string, string> chatHeaders = new Dictionary<string, string>();
+        static string chatHost;
 
-        static Dictionary<string, string> ChatRoomData = new Dictionary<string, string>();
-        static Dictionary<string, string> ChatHeaders = new Dictionary<string, string>();
-        static string ChatHost;
+        static string botName;
+        
+        private static Timer pingTimer;
 
-        static string BotName;
-
-        static Thread PingThread;
-
-        static void Login()
+        public static async Task Init(string wikia, string username, string password)
         {
-            LoginRestClient.CookieContainer = SharedCookieContainer;
-            ChatRestClient.CookieContainer = SharedCookieContainer;
-            PingRestClient.CookieContainer = SharedCookieContainer;
+            loginHttpClient.BaseAddress = new Uri($"http://{wikia}.wikia.com/");
+            chatHttpClient.BaseAddress = new Uri($"http://{wikia}.wikia.com/");
+            pingHttpClient.BaseAddress = new Uri($"http://{wikia}.wikia.com/");
 
-            var request = new RestRequest("/api.php", Method.POST);
-            request.AddParameter("action", "login");
-            request.AddParameter("lgname", WikiaDiscordBridge.Config["wikia_username"]);
-            request.AddParameter("lgpassword", WikiaDiscordBridge.Config["wikia_password"]);
-            request.AddParameter("format", "json");
+            var content = new Dictionary<string, string>
+            {
+                { "action", "login" },
+                { "lgname", username },
+                { "lgpassword", password },
+                { "format", "json" }, 
+            };
 
-            var response = LoginRestClient.Execute(request);
-            dynamic responseData = JsonConvert.DeserializeObject(response.Content);
+            var encodedContent = new FormUrlEncodedContent(content);
 
-            request.AddParameter("lgtoken", responseData.login.token);
+            var response = await loginHttpClient.PostAsync("api.php", new FormUrlEncodedContent(content));
+            while(!response.IsSuccessStatusCode) response = await loginHttpClient.PostAsync("api.php", encodedContent);
+            dynamic responseData = JsonConvert.DeserializeObject(await response.Content.ReadAsStringAsync());
 
-            var cookieResponse = LoginRestClient.Execute(request);
+            content.Add("lgtoken", (string)responseData["login"]["token"]);
 
-            Console.WriteLine("Login complete.");
+            var cookieResponse = await loginHttpClient.PostAsync("api.php", new FormUrlEncodedContent(content));
+
+            Tools.Log("Wikia","Init complete.");
         }
 
-        public static void GetChatInfo()
+        public static async Task GetChatInfo(string username)
         {
-            Login();
+            chatHeaders.Add("User-Agent", "Wikia-Discord Bridge by OmegaVesko");
+            //chatHeaders.Add("Content-Type", "application/octet-stream");
+            chatHeaders.Add("Accept", "*/*");
+            chatHeaders.Add("Pragma", "no-cache");
+            chatHeaders.Add("Cache-Control", "no-cache");
 
-            ChatHeaders.Add("User-Agent", "Wikia-Discord Bridge by OmegaVesko");
-            ChatHeaders.Add("Content-Type", "application/octet-stream");
-            ChatHeaders.Add("Accept", "*/*");
-            ChatHeaders.Add("Pragma", "no-cache");
-            ChatHeaders.Add("Cache-Control", "no-cache");
+            var request = new HttpRequestMessage(HttpMethod.Get, "wikia.php?controller=Chat&format=json");
+            foreach (var pair in chatHeaders) request.Headers.Add(pair.Key, pair.Value);
 
-            var request = new RestRequest("/wikia.php", Method.GET);
-            foreach (var pair in ChatHeaders) request.AddHeader(pair.Key, pair.Value);
-
-            request.AddParameter("controller", "Chat");
-            request.AddParameter("format", "json");
-
-            var response = LoginRestClient.Execute(request);
-            dynamic responseData = JsonConvert.DeserializeObject(response.Content);
+            var response = await loginHttpClient.SendAsync(request);
+            while (!response.IsSuccessStatusCode) response = await loginHttpClient.SendAsync(request);
+            dynamic responseData = JsonConvert.DeserializeObject(await response.Content.ReadAsStringAsync());
 
             string chatKey = responseData.chatkey;
             string chatRoom = responseData.roomId;
-            ChatHost = responseData.chatServerHost;
-            string chatPort = responseData.chatServerPort;
-            string chatMod = responseData.isModerator;
+            chatHost = responseData.chatServerHost;
 
-            var cityIdRequest = new RestRequest("/api.php", Method.GET);
-            foreach (var pair in ChatHeaders) cityIdRequest.AddHeader(pair.Key, pair.Value);
+            var cityIdRequest = new HttpRequestMessage(HttpMethod.Get, "api.php?action=query&meta=siteinfo&siprop=wikidesc&format=json");
+            foreach (var pair in chatHeaders) cityIdRequest.Headers.Add(pair.Key, pair.Value);
 
-            cityIdRequest.AddParameter("action", "query");
-            cityIdRequest.AddParameter("meta", "siteinfo");
-            cityIdRequest.AddParameter("siprop", "wikidesc");
-            cityIdRequest.AddParameter("format", "json");
-
-            var cityIdResponse = LoginRestClient.Execute(cityIdRequest);
-            dynamic cityIdResponseData = JsonConvert.DeserializeObject(cityIdResponse.Content);
+            var cityIdResponse = await loginHttpClient.SendAsync(cityIdRequest);
+            while(!response.IsSuccessStatusCode) cityIdResponse = await loginHttpClient.SendAsync(cityIdRequest);
+            dynamic cityIdResponseData = JsonConvert.DeserializeObject(await cityIdResponse.Content.ReadAsStringAsync());
 
             string chatServer = cityIdResponseData.query.wikidesc.id;
 
-            ChatRoomData.Add("name", WikiaDiscordBridge.Config["wikia_username"]);
-            ChatRoomData.Add("EIO", "1:2");
-            ChatRoomData.Add("transport", "polling");
-            ChatRoomData.Add("key", chatKey);
-            ChatRoomData.Add("roomId", chatRoom);
-            ChatRoomData.Add("serverId", chatServer);
-            ChatRoomData.Add("wikiId", chatServer);
+            chatRoomData.Add("name", username);
+            chatRoomData.Add("EIO", "1:2");
+            chatRoomData.Add("transport", "polling");
+            chatRoomData.Add("key", chatKey);
+            chatRoomData.Add("roomId", chatRoom);
+            chatRoomData.Add("serverId", chatServer);
+            chatRoomData.Add("wikiId", chatServer);
 
-            LoginRestClient.BaseUrl = new Uri($"http://{ChatHost}");
-            ChatRestClient.BaseUrl = new Uri($"http://{ChatHost}");
-            PingRestClient.BaseUrl = new Uri($"http://{ChatHost}");
+            loginHttpClient = new HttpClient(handler) {BaseAddress = new Uri($"http://{chatHost}/")};
+            chatHttpClient = new HttpClient(handler) {BaseAddress = new Uri($"http://{chatHost}/")};
+            pingHttpClient = new HttpClient(handler) {BaseAddress = new Uri($"http://{chatHost}/")};
 
-            var sessionIdRequest = new RestRequest($"/socket.io/", Method.GET);
-            foreach (var pair in ChatRoomData) sessionIdRequest.AddParameter(pair.Key, pair.Value);
-            foreach (var pair in ChatHeaders) sessionIdRequest.AddHeader(pair.Key, pair.Value);
+            var requestStringBuilder = new StringBuilder("socket.io/?");
+            foreach (var pair in chatRoomData) requestStringBuilder.Append($"{pair.Key}={Uri.EscapeDataString(pair.Value)}&");
+            var requestString = requestStringBuilder.ToString().TrimEnd('&');
+            var sessionIdRequest = new HttpRequestMessage(HttpMethod.Get, requestString);
+            foreach (var pair in chatHeaders) sessionIdRequest.Headers.Add(pair.Key, pair.Value);
 
-            var sessionIdResponse = LoginRestClient.Execute(sessionIdRequest);
+            var sessionIdResponse = await loginHttpClient.SendAsync(sessionIdRequest);
+            while(!sessionIdResponse.IsSuccessStatusCode) sessionIdResponse = await loginHttpClient.SendAsync(sessionIdRequest);
 
-            dynamic sessionIdResponseData = JsonConvert.DeserializeObject(sessionIdResponse.Content.Substring(5));
+            dynamic sessionIdResponseData = JsonConvert.DeserializeObject((await sessionIdResponse.Content.ReadAsStringAsync()).Substring(5));
 
-            ChatRoomData.Add("sid", (string) sessionIdResponseData.sid);
+            chatRoomData.Add("sid", (string) sessionIdResponseData.sid);
 
-            BotName = ChatRoomData["name"];
+            botName = chatRoomData["name"];
 
-            Console.WriteLine("Fetched server info.");
+            Tools.Log("Wikia","Fetched server info.");
         }
 
         static string EncodeToRetardedFormat(string text)
@@ -120,19 +116,20 @@ namespace WikiaDiscordBridge
             return text.Length + ":" + text;
         }
 
-        static void PingOnce()
+        static async Task PingOnce()
         {
             var body = "1:2";
+            
+            var pingRequest = new HttpRequestMessage(HttpMethod.Post, GetQueryString())
+            {
+                Content = new StringContent(body, Encoding.UTF8, "text/plain")
+            };
+            foreach (var pair in chatHeaders) pingRequest.Headers.Add(pair.Key, pair.Value);
 
-            var pingRequest = new RestRequest($"/socket.io/", Method.POST);
-            pingRequest.AddParameter("text/plain;charset=UTF-8", body, ParameterType.RequestBody);
-            foreach (var pair in ChatRoomData) pingRequest.AddParameter(pair.Key, pair.Value, ParameterType.QueryString);
-            foreach (var pair in ChatHeaders) pingRequest.AddHeader(pair.Key, pair.Value);
-
-            var response = PingRestClient.Execute(pingRequest);
+            await pingHttpClient.SendAsync(pingRequest);
         }
 
-        public static void SendMessage(string message)
+        public static async Task SendMessage(string message)
         {
             var cleanMessage = "";
 
@@ -164,61 +161,50 @@ namespace WikiaDiscordBridge
             // cleanMessage = Encoding.GetEncoding("iso-8859-9").GetString(Encoding.UTF8.GetBytes(cleanMessage));
             //Console.WriteLine("Post-re-encoding: " + cleanMessage);
 
-            Console.WriteLine($"Sending: \"{cleanMessage}\"");
-            string requestBody = EncodeToRetardedFormat(@"42[""message"",""{\""id\"":null,\""cid\"":\""c2079\"",\""attrs\"":{\""msgType\"":\""chat\"",\""roomId\"":\""" + ChatRoomData["roomId"] +@"\"",\""name\"":\""" + BotName + @"\"",\""text\"":\""" + cleanMessage + @"\"",\""avatarSrc\"":\""\"",\""timeStamp\"":\""\"",\""continued\"":false,\""temp\"":false}}""]");
-
-            var request = new RestRequest($"/socket.io/", Method.POST);
-            request.AddParameter("text/plain;charset=UTF-8", requestBody, ParameterType.RequestBody);
-            foreach (var pair in ChatRoomData) request.AddParameter(pair.Key, pair.Value, ParameterType.QueryString);
-            foreach (var pair in ChatHeaders) request.AddHeader(pair.Key, pair.Value);
-
-            var response = ChatRestClient.Execute(request);
-        }
-
-        static void PingContinuously()
-        {
-            PingThread = new Thread(() =>
+            Tools.Log("Wikia",$"Sending: \"{cleanMessage}\"");
+            string requestBody = EncodeToRetardedFormat(@"42[""message"",""{\""id\"":null,\""cid\"":\""c2079\"",\""attrs\"":{\""msgType\"":\""chat\"",\""roomId\"":\""" + chatRoomData["roomId"] +@"\"",\""name\"":\""" + botName + @"\"",\""text\"":\""" + cleanMessage + @"\"",\""avatarSrc\"":\""\"",\""timeStamp\"":\""\"",\""continued\"":false,\""temp\"":false}}""]");
+            
+            var request = new HttpRequestMessage(HttpMethod.Post, GetQueryString())
             {
-                Thread.CurrentThread.IsBackground = true;
+                Content = new StringContent(requestBody, Encoding.UTF8, "text/plain")
+            };
+            foreach (var pair in chatHeaders) request.Headers.Add(pair.Key, pair.Value);
 
-                while (true)
-                {
-                    PingOnce();
-                    Thread.Sleep(10000);
-                }
-
-            });
-
-            PingThread.Start();
+            await chatHttpClient.SendAsync(request);
         }
 
-        public static void ConnectToChat()
+        static void PingCallback(object state)
         {
-            PingContinuously();
+            PingOnce().Wait();
+        }
+
+        public static async Task ConnectToChat()
+        {
+            pingTimer = new Timer(PingCallback, null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
 
             while(true)
             {
                 var unixTime = (Int32)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
-                ChatRoomData["t"] = $"{unixTime}-0";
-
-                var request = new RestRequest("/socket.io/");
-                foreach (var pair in ChatRoomData) request.AddParameter(pair.Key, pair.Value);
-                foreach (var pair in ChatHeaders) request.AddHeader(pair.Key, pair.Value);
-
-                var response = ChatRestClient.Execute(request);
+                chatRoomData["t"] = $"{unixTime}-0";
                 
-                if (response.Content.Contains("Session ID unknown"))
+                var request = new HttpRequestMessage(HttpMethod.Get, GetQueryString());
+                foreach (var pair in chatHeaders) request.Headers.Add(pair.Key, pair.Value);
+
+                var response = await chatHttpClient.SendAsync(request);
+                while (!response.IsSuccessStatusCode) response = await chatHttpClient.SendAsync(request);
+
+                var responseString = await response.Content.ReadAsStringAsync();
+                
+                if (responseString.Contains("Session ID unknown"))
                 {
-                    Console.WriteLine("Server returned 'session ID unknown'. Reconnecting.");
+                    Tools.Log("Wikia","Server returned 'session ID unknown'. Reconnecting.");
 
                     //new Thread(() => { Restart(); }).Start();
                     WikiaDiscordBridge.Restart();
 
                     break;
-                }
-                else if (response.Content.Length > 20)
+                } if (responseString.Length > 20)
                 {
-                    var responseString = response.Content;
 
                     if (responseString.Contains("[\"message\""))
                     {
@@ -235,15 +221,15 @@ namespace WikiaDiscordBridge
                         dynamic responseObject = JsonConvert.DeserializeObject(responseString);
                         dynamic responseDataObject = JsonConvert.DeserializeObject(responseObject[1].data.Value);
 
-                        ChatEvent(responseObject, responseDataObject);
+                        await ChatEvent(responseObject, responseDataObject);
                     }                    
                 }
             }
         }
 
-        static void ChatEvent(dynamic responseObject, dynamic dataObject)
+        static async Task ChatEvent(dynamic responseObject, dynamic dataObject)
         {
-            if (((string)dataObject["attrs"]["name"]).ToLower() != BotName.ToLower())
+            if (((string)dataObject["attrs"]["name"]).ToLower() != botName.ToLower())
             {
                 var name = (string) dataObject["attrs"]["name"];
 
@@ -256,23 +242,23 @@ namespace WikiaDiscordBridge
                 switch ((string)responseObject[1]["event"])
                 {
                     case "chat:add":
-                        Console.WriteLine($"{name}: {text}");
-                        DiscordSession.SendMessage($"**{name}**: {text}");
+                        Tools.Log("Wikia",$"{name}: {text}");
+                        await DiscordSession.SendMessage($"**{name}**: {text}");
                         break;
 
                     case "join":
-                        Console.WriteLine($"{name} has joined the chat.");
-                        DiscordSession.SendMessage($"**{name}** has joined the chat.");
+                        Tools.Log("Wikia",$"{name} has joined the chat.");
+                        await DiscordSession.SendMessage($"**{name}** has joined the chat.");
                         break;
 
                     case "logout":
-                        Console.WriteLine($"{name} has left the chat.");
-                        DiscordSession.SendMessage($"**{name}** has left the chat.");
+                        Tools.Log("Wikia",$"{name} has left the chat.");
+                        await DiscordSession.SendMessage($"**{name}** has left the chat.");
                         break;
 
                     case "part":
-                        Console.WriteLine($"{name} has left the chat.");
-                        DiscordSession.SendMessage($"**{name}** has left the chat.");
+                        Tools.Log("Wikia",$"{name} has left the chat.");
+                        await DiscordSession.SendMessage($"**{name}** has left the chat.");
                         break;
                 }
             }
@@ -302,21 +288,11 @@ namespace WikiaDiscordBridge
             return processedMessage;
         }
 
-        static void Restart()
+        static string GetQueryString()
         {
-            PingThread.Abort();
-
-            SharedCookieContainer = new System.Net.CookieContainer();
-
-            LoginRestClient.BaseUrl = new Uri($"http://{WikiaDiscordBridge.Config["wikia_name"]}.wikia.com");
-            ChatRestClient.BaseUrl = new Uri($"http://{WikiaDiscordBridge.Config["wikia_name"]}.wikia.com");
-            PingRestClient.BaseUrl = new Uri($"http://{WikiaDiscordBridge.Config["wikia_name"]}.wikia.com");
-
-            ChatRoomData = new Dictionary<string, string>();
-            ChatHeaders = new Dictionary<string, string>();
-
-            GetChatInfo();
-            ConnectToChat();
+            var requestStringBuilder = new StringBuilder("socket.io/?");
+            foreach (var pair in chatRoomData) requestStringBuilder.Append($"{pair.Key}={Uri.EscapeDataString(pair.Value)}&");
+            return requestStringBuilder.ToString().TrimEnd('&');
         }
     }
 }
