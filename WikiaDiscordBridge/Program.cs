@@ -2,7 +2,6 @@
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Nito.AsyncEx;
 
 namespace WikiaDiscordBridge
 {
@@ -15,7 +14,8 @@ namespace WikiaDiscordBridge
 
         private static async Task StartAsync(string[] args)
         {
-            using (var streamReader = new StreamReader("config.yaml"))
+            using (var fileStream = new FileStream("config.yaml", FileMode.Open))
+            using (var streamReader = new StreamReader(fileStream))
             {
                 var deserializer = new YamlDotNet.Serialization.Deserializer();
                 config = deserializer.Deserialize(streamReader);
@@ -34,7 +34,9 @@ namespace WikiaDiscordBridge
                 wikiaName);
             
             cts = new CancellationTokenSource(TimeSpan.FromMinutes(int.Parse(config["restart_timer"])));
-            await Task.WhenAny(WikiaSession.ConnectToChat(), cts.Token.AsTask());
+			var completionSource = new TaskCompletionSource<object>();
+            cts.Token.Register(() => completionSource.TrySetCanceled());
+            await Task.WhenAny(WikiaSession.ConnectToChat(), completionSource.Task);
         }
 
         public static void Restart()
