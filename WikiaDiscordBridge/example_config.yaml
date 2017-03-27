@@ -6,3 +6,4 @@ discord_channel: "discord_channel_id"
 discord_bot_token: "your_bot_token"
 
 restart_timer: 60 # minutes
+log_timestamp: false

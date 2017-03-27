@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,6 +24,15 @@ namespace WikiaDiscordBridge
                 Console.WriteLine("Successfully loaded configuration.");
             }
 
+            bool useTimestamp = false;
+            try
+            {
+                useTimestamp = bool.TryParse(config["log_timestamp"], out bool value) && value;
+            }
+            catch (KeyNotFoundException) { }
+
+            Tools.InitLogging(useTimestamp);
+
             await WikiaSession.Init((string)config["wikia_name"], (string)config["wikia_username"], (string)config["wikia_password"]);
             await WikiaSession.GetChatInfo((string)config["wikia_username"]);
 
@@ -30,11 +40,10 @@ namespace WikiaDiscordBridge
             ulong discordChannel = ulong.Parse(config["discord_channel"]);
             string wikiaName = config["wikia_name"];
 
-            await DiscordSession.Init(botToken, discordChannel,
-                wikiaName);
+            await DiscordSession.Init(botToken, discordChannel, wikiaName);
             
             cts = new CancellationTokenSource(TimeSpan.FromMinutes(int.Parse(config["restart_timer"])));
-			var completionSource = new TaskCompletionSource<object>();
+            var completionSource = new TaskCompletionSource<object>();
             cts.Token.Register(() => completionSource.TrySetCanceled());
             await Task.WhenAny(WikiaSession.ConnectToChat(), completionSource.Task);
         }
