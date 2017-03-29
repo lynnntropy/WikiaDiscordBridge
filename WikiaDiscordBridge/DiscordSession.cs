@@ -43,7 +43,7 @@ namespace WikiaDiscordBridge
 
                 await WikiaSession.SendMessage($"{displayName}: {msg.Content}");
 
-                var matches = Regex.Matches(msg.Content, @"\[{2}(.+?)\]{2}");
+                var matches = Regex.Matches(msg.Content, @"\[{2}([\w!""#$%&'()*+,\-./:;<=>?@[\]^`{|}~\ ]+?)\]{2}");
                 if (matches.Count <= 0) return;
                 foreach (Match match in matches)
                 {
