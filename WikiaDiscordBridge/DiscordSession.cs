@@ -31,7 +31,7 @@ namespace WikiaDiscordBridge
                 foreach (Match match in matches)
                 {
                     var resourceName = match.Groups[1].Value.Replace(" ", "_");
-                    var escapedName = Uri.EscapeUriString(resourceName);
+                    var escapedName = Uri.EscapeDataString(resourceName);
 
                     await msg.Channel.SendMessageAsync($"<http://{wikiaName}.wikia.com/wiki/{escapedName}>");
                 }
