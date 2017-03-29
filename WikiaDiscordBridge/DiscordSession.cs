@@ -15,6 +15,7 @@ namespace WikiaDiscordBridge
 
         private static ulong trackedChannelId;
         private static string wikiaName;
+        private static readonly Regex LinkRegex = new Regex(@"\[{2}([\w!""#$%&'()*+,\-./:;<=>?@[\]^`{|}~\ ]+?)\]{2}", RegexOptions.Compiled);
 
         static DiscordSession()
         {
@@ -25,6 +26,16 @@ namespace WikiaDiscordBridge
             };
             client.MessageReceived += async msg =>
             {
+                var matches = LinkRegex.Matches(msg.Content);
+                if (matches.Count <= 0) return;
+                foreach (Match match in matches)
+                {
+                    var resourceName = match.Groups[1].Value.Replace(" ", "_");
+                    var escapedName = Uri.EscapeUriString(resourceName);
+
+                    await msg.Channel.SendMessageAsync($"<http://{wikiaName}.wikia.com/wiki/{escapedName}>");
+                }
+
                 if (msg.Channel.Id != trackedChannelId || msg.Author.Id == client.CurrentUser.Id) return;
 
                 var displayName = string.IsNullOrWhiteSpace((msg.Author as IGuildUser)?.Nickname)
@@ -42,16 +53,6 @@ namespace WikiaDiscordBridge
                 if (string.IsNullOrWhiteSpace(msg.Content)) return;
 
                 await WikiaSession.SendMessage($"{displayName}: {msg.Content}");
-
-                var matches = Regex.Matches(msg.Content, @"\[{2}([\w!""#$%&'()*+,\-./:;<=>?@[\]^`{|}~\ ]+?)\]{2}");
-                if (matches.Count <= 0) return;
-                foreach (Match match in matches)
-                {
-                    var resourceName = match.Groups[1].Value.Replace(" ", "_");
-                    var escapedName = Uri.EscapeUriString(resourceName);
-
-                    await msg.Channel.SendMessageAsync($"<http://{wikiaName}.wikia.com/wiki/{escapedName}>");
-                }
             };
         }
 
