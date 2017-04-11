@@ -26,17 +26,21 @@ namespace WikiaDiscordBridge
             };
             client.MessageReceived += async msg =>
             {
-                var matches = LinkRegex.Matches(msg.Content);
-                if (matches.Count <= 0) return;
-                foreach (Match match in matches)
-                {
-                    var resourceName = match.Groups[1].Value.Replace(" ", "_");
-                    var escapedName = Uri.EscapeDataString(resourceName);
+                if (msg.Author.Id == client.CurrentUser.Id) return;
 
-                    await msg.Channel.SendMessageAsync($"<http://{wikiaName}.wikia.com/wiki/{escapedName}>");
+                var matches = LinkRegex.Matches(msg.Content);
+                if (matches.Count > 0)
+                {
+                    foreach (Match match in matches)
+                    {
+                        var resourceName = match.Groups[1].Value.Replace(" ", "_");
+                        var escapedName = Uri.EscapeDataString(resourceName);
+
+                        await msg.Channel.SendMessageAsync($"<http://{wikiaName}.wikia.com/wiki/{escapedName}>");
+                    }
                 }
 
-                if (msg.Channel.Id != trackedChannelId || msg.Author.Id == client.CurrentUser.Id) return;
+                if (msg.Channel.Id != trackedChannelId) return;
 
                 var displayName = string.IsNullOrWhiteSpace((msg.Author as IGuildUser)?.Nickname)
                     ? msg.Author.Username
