@@ -11,26 +11,28 @@ namespace WikiaDiscordBridge
 {
     class WikiaSession
     {
-        private static System.Net.CookieContainer sharedCookieContainer = new System.Net.CookieContainer();
-        private static readonly HttpClientHandler handler = new HttpClientHandler { CookieContainer = sharedCookieContainer };
+        private static readonly System.Net.CookieContainer SharedCookieContainer = new System.Net.CookieContainer();
+        private static readonly HttpClientHandler handler = new HttpClientHandler { CookieContainer = SharedCookieContainer };
         
         private static HttpClient loginHttpClient = new HttpClient(handler);
         private static HttpClient chatHttpClient = new HttpClient(handler);
         private static HttpClient pingHttpClient = new HttpClient(handler);
 
-        static Dictionary<string, string> chatRoomData = new Dictionary<string, string>();
-        static Dictionary<string, string> chatHeaders = new Dictionary<string, string>();
+        private static readonly Dictionary<string, string> ChatRoomData = new Dictionary<string, string>();
+        private static readonly Dictionary<string, string> ChatHeaders = new Dictionary<string, string>();
         static string chatHost;
 
         static string botName;
+        private static string wikiaName = string.Empty;
         
         private static Timer pingTimer;
 
         public static async Task Init(string wikia, string username, string password)
         {
-            loginHttpClient.BaseAddress = new Uri($"http://{wikia}.wikia.com/");
-            chatHttpClient.BaseAddress = new Uri($"http://{wikia}.wikia.com/");
-            pingHttpClient.BaseAddress = new Uri($"http://{wikia}.wikia.com/");
+            wikiaName = wikia;
+            loginHttpClient.BaseAddress = new Uri($"http://{wikiaName}.wikia.com/");
+            chatHttpClient.BaseAddress = new Uri($"http://{wikiaName}.wikia.com/");
+            pingHttpClient.BaseAddress = new Uri($"http://{wikiaName}.wikia.com/");
 
             var content = new Dictionary<string, string>
             {
@@ -39,11 +41,10 @@ namespace WikiaDiscordBridge
                 { "lgpassword", password },
                 { "format", "json" }, 
             };
-
-            var encodedContent = new FormUrlEncodedContent(content);
+            
 
             var response = await loginHttpClient.PostAsync("api.php", new FormUrlEncodedContent(content));
-            while(!response.IsSuccessStatusCode) response = await loginHttpClient.PostAsync("api.php", encodedContent);
+            while(!response.IsSuccessStatusCode) response = await loginHttpClient.PostAsync("api.php", new FormUrlEncodedContent(content));
             dynamic responseData = JsonConvert.DeserializeObject(await response.Content.ReadAsStringAsync());
 
             content.Add("lgtoken", (string)responseData["login"]["token"]);
@@ -55,14 +56,14 @@ namespace WikiaDiscordBridge
 
         public static async Task GetChatInfo(string username)
         {
-            chatHeaders.Add("User-Agent", "Wikia-Discord Bridge by OmegaVesko");
+            ChatHeaders.Add("User-Agent", "Wikia-Discord Bridge by OmegaVesko");
             //chatHeaders.Add("Content-Type", "application/octet-stream");
-            chatHeaders.Add("Accept", "*/*");
-            chatHeaders.Add("Pragma", "no-cache");
-            chatHeaders.Add("Cache-Control", "no-cache");
+            ChatHeaders.Add("Accept", "*/*");
+            ChatHeaders.Add("Pragma", "no-cache");
+            ChatHeaders.Add("Cache-Control", "no-cache");
 
             var request = new HttpRequestMessage(HttpMethod.Get, "wikia.php?controller=Chat&format=json");
-            foreach (var pair in chatHeaders) request.Headers.Add(pair.Key, pair.Value);
+            foreach (var pair in ChatHeaders) request.Headers.Add(pair.Key, pair.Value);
 
             var response = await loginHttpClient.SendAsync(request);
             while (!response.IsSuccessStatusCode) response = await loginHttpClient.SendAsync(request);
@@ -73,7 +74,7 @@ namespace WikiaDiscordBridge
             chatHost = responseData.chatServerHost;
 
             var cityIdRequest = new HttpRequestMessage(HttpMethod.Get, "api.php?action=query&meta=siteinfo&siprop=wikidesc&format=json");
-            foreach (var pair in chatHeaders) cityIdRequest.Headers.Add(pair.Key, pair.Value);
+            foreach (var pair in ChatHeaders) cityIdRequest.Headers.Add(pair.Key, pair.Value);
 
             var cityIdResponse = await loginHttpClient.SendAsync(cityIdRequest);
             while(!response.IsSuccessStatusCode) cityIdResponse = await loginHttpClient.SendAsync(cityIdRequest);
@@ -81,32 +82,29 @@ namespace WikiaDiscordBridge
 
             string chatServer = cityIdResponseData.query.wikidesc.id;
 
-            chatRoomData.Add("name", username);
-            chatRoomData.Add("EIO", "1:2");
-            chatRoomData.Add("transport", "polling");
-            chatRoomData.Add("key", chatKey);
-            chatRoomData.Add("roomId", chatRoom);
-            chatRoomData.Add("serverId", chatServer);
-            chatRoomData.Add("wikiId", chatServer);
+            ChatRoomData.Add("name", username);
+            ChatRoomData.Add("EIO", "1:2");
+            ChatRoomData.Add("transport", "polling");
+            ChatRoomData.Add("key", chatKey);
+            ChatRoomData.Add("roomId", chatRoom);
+            ChatRoomData.Add("serverId", chatServer);
+            ChatRoomData.Add("wikiId", chatServer);
 
             loginHttpClient = new HttpClient(handler) {BaseAddress = new Uri($"http://{chatHost}/")};
             chatHttpClient = new HttpClient(handler) {BaseAddress = new Uri($"http://{chatHost}/")};
             pingHttpClient = new HttpClient(handler) {BaseAddress = new Uri($"http://{chatHost}/")};
-
-            var requestStringBuilder = new StringBuilder("socket.io/?");
-            foreach (var pair in chatRoomData) requestStringBuilder.Append($"{pair.Key}={Uri.EscapeDataString(pair.Value)}&");
-            var requestString = requestStringBuilder.ToString().TrimEnd('&');
-            var sessionIdRequest = new HttpRequestMessage(HttpMethod.Get, requestString);
-            foreach (var pair in chatHeaders) sessionIdRequest.Headers.Add(pair.Key, pair.Value);
+            
+            var sessionIdRequest = new HttpRequestMessage(HttpMethod.Get, GetQueryString());
+            foreach (var pair in ChatHeaders) sessionIdRequest.Headers.Add(pair.Key, pair.Value);
 
             var sessionIdResponse = await loginHttpClient.SendAsync(sessionIdRequest);
             while(!sessionIdResponse.IsSuccessStatusCode) sessionIdResponse = await loginHttpClient.SendAsync(sessionIdRequest);
 
             dynamic sessionIdResponseData = JsonConvert.DeserializeObject((await sessionIdResponse.Content.ReadAsStringAsync()).Substring(5));
 
-            chatRoomData.Add("sid", (string) sessionIdResponseData.sid);
+            ChatRoomData.Add("sid", (string) sessionIdResponseData.sid);
 
-            botName = chatRoomData["name"];
+            botName = ChatRoomData["name"];
 
             Tools.Log("Wikia","Fetched server info.");
         }
@@ -124,7 +122,7 @@ namespace WikiaDiscordBridge
             {
                 Content = new StringContent(body, Encoding.UTF8, "text/plain")
             };
-            foreach (var pair in chatHeaders) pingRequest.Headers.Add(pair.Key, pair.Value);
+            foreach (var pair in ChatHeaders) pingRequest.Headers.Add(pair.Key, pair.Value);
 
             await pingHttpClient.SendAsync(pingRequest);
         }
@@ -161,14 +159,14 @@ namespace WikiaDiscordBridge
             // cleanMessage = Encoding.GetEncoding("iso-8859-9").GetString(Encoding.UTF8.GetBytes(cleanMessage));
             //Console.WriteLine("Post-re-encoding: " + cleanMessage);
 
-            Tools.Log("Wikia",$"Sending: \"{cleanMessage}\"");
-            string requestBody = EncodeToRetardedFormat(@"42[""message"",""{\""id\"":null,\""cid\"":\""c2079\"",\""attrs\"":{\""msgType\"":\""chat\"",\""roomId\"":\""" + chatRoomData["roomId"] +@"\"",\""name\"":\""" + botName + @"\"",\""text\"":\""" + cleanMessage + @"\"",\""avatarSrc\"":\""\"",\""timeStamp\"":\""\"",\""continued\"":false,\""temp\"":false}}""]");
+            Tools.Log("Discord",$"{cleanMessage}");
+            string requestBody = EncodeToRetardedFormat(@"42[""message"",""{\""id\"":null,\""cid\"":\""c2079\"",\""attrs\"":{\""msgType\"":\""chat\"",\""roomId\"":\""" + ChatRoomData["roomId"] +@"\"",\""name\"":\""" + botName + @"\"",\""text\"":\""" + cleanMessage + @"\"",\""avatarSrc\"":\""\"",\""timeStamp\"":\""\"",\""continued\"":false,\""temp\"":false}}""]");
             
             var request = new HttpRequestMessage(HttpMethod.Post, GetQueryString())
             {
                 Content = new StringContent(requestBody, Encoding.UTF8, "text/plain")
             };
-            foreach (var pair in chatHeaders) request.Headers.Add(pair.Key, pair.Value);
+            foreach (var pair in ChatHeaders) request.Headers.Add(pair.Key, pair.Value);
 
             await chatHttpClient.SendAsync(request);
         }
@@ -185,10 +183,10 @@ namespace WikiaDiscordBridge
             while(true)
             {
                 var unixTime = (Int32)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
-                chatRoomData["t"] = $"{unixTime}-0";
+                ChatRoomData["t"] = $"{unixTime}-0";
                 
                 var request = new HttpRequestMessage(HttpMethod.Get, GetQueryString());
-                foreach (var pair in chatHeaders) request.Headers.Add(pair.Key, pair.Value);
+                foreach (var pair in ChatHeaders) request.Headers.Add(pair.Key, pair.Value);
 
                 var response = await chatHttpClient.SendAsync(request);
                 while (!response.IsSuccessStatusCode) response = await chatHttpClient.SendAsync(request);
@@ -281,7 +279,7 @@ namespace WikiaDiscordBridge
                     resourceName = resourceName.Replace(" ", "_");
                     resourceName = Uri.EscapeUriString(resourceName);
 
-                    return $"http://swordartonline.wikia.com/wiki/{resourceName}";
+                    return $"http://{wikiaName}.wikia.com/wiki/{resourceName}";
                 });
             }
 
@@ -291,7 +289,7 @@ namespace WikiaDiscordBridge
         static string GetQueryString()
         {
             var requestStringBuilder = new StringBuilder("socket.io/?");
-            foreach (var pair in chatRoomData) requestStringBuilder.Append($"{pair.Key}={Uri.EscapeDataString(pair.Value)}&");
+            foreach (var pair in ChatRoomData) requestStringBuilder.Append($"{pair.Key}={Uri.EscapeDataString(pair.Value)}&");
             return requestStringBuilder.ToString().TrimEnd('&');
         }
     }
