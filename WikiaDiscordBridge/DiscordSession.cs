@@ -56,7 +56,7 @@ namespace WikiaDiscordBridge
 
                 if (string.IsNullOrWhiteSpace(msg.Content)) return;
 
-                await WikiaSession.SendMessage($"{displayName}: {msg.Content}");
+                await WikiaSession.SendMessage($"{displayName}: {(msg as IUserMessage)?.Resolve() ?? msg.Content}");
             };
         }
 
