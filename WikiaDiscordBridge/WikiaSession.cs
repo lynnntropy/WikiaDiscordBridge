@@ -77,7 +77,7 @@ namespace WikiaDiscordBridge
             foreach (var pair in ChatHeaders) cityIdRequest.Headers.Add(pair.Key, pair.Value);
 
             var cityIdResponse = await loginHttpClient.SendAsync(cityIdRequest);
-            while(!response.IsSuccessStatusCode) cityIdResponse = await loginHttpClient.SendAsync(cityIdRequest);
+            while(!cityIdResponse.IsSuccessStatusCode) cityIdResponse = await loginHttpClient.SendAsync(cityIdRequest);
             dynamic cityIdResponseData = JsonConvert.DeserializeObject(await cityIdResponse.Content.ReadAsStringAsync());
 
             string chatServer = cityIdResponseData.query.wikidesc.id;
@@ -100,7 +100,8 @@ namespace WikiaDiscordBridge
             var sessionIdResponse = await loginHttpClient.SendAsync(sessionIdRequest);
             while(!sessionIdResponse.IsSuccessStatusCode) sessionIdResponse = await loginHttpClient.SendAsync(sessionIdRequest);
 
-            dynamic sessionIdResponseData = JsonConvert.DeserializeObject((await sessionIdResponse.Content.ReadAsStringAsync()).Substring(5));
+            var content = await sessionIdResponse.Content.ReadAsStringAsync();
+            dynamic sessionIdResponseData = JsonConvert.DeserializeObject(content.Substring(content.IndexOf('{')));
 
             ChatRoomData.Add("sid", (string) sessionIdResponseData.sid);
 
