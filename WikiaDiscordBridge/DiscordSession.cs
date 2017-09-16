@@ -2,6 +2,7 @@
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Discord;
+using Discord.Net.Queue;
 using Discord.WebSocket;
 
 namespace WikiaDiscordBridge
@@ -10,7 +11,7 @@ namespace WikiaDiscordBridge
     {
         private static readonly DiscordSocketClient client = new DiscordSocketClient( new DiscordSocketConfig
         {
-            LogLevel = LogSeverity.Error
+            LogLevel = LogSeverity.Info
         });
 
         private static ulong trackedChannelId;
@@ -24,11 +25,19 @@ namespace WikiaDiscordBridge
                 Tools.Log("Discord", $"Connected to Discord as {client.CurrentUser.Username}#{client.CurrentUser.DiscriminatorValue}.");
                 return Task.CompletedTask;
             };
+            client.Log += msg =>
+            {
+                Tools.Log("Discord", $"{msg.Severity}: {msg.Message}");
+                return Task.CompletedTask;
+            };
             client.MessageReceived += async msg =>
             {
-                if (msg.Author.Id == client.CurrentUser.Id) return;
+                var userMessage = msg as IUserMessage;
+                if(userMessage == null) return;
 
-                var matches = LinkRegex.Matches(msg.Content);
+                if (userMessage.Author.Id == client.CurrentUser.Id) return;
+
+                var matches = LinkRegex.Matches(userMessage.Content);
                 if (matches.Count > 0)
                 {
                     foreach (Match match in matches)
@@ -36,27 +45,28 @@ namespace WikiaDiscordBridge
                         var resourceName = match.Groups[1].Value.Replace(" ", "_");
                         var escapedName = Uri.EscapeDataString(resourceName);
 
-                        await msg.Channel.SendMessageAsync($"<http://{wikiaName}.wikia.com/wiki/{escapedName}>");
+                        await userMessage.Channel.SendMessageAsync($"<http://{wikiaName}.wikia.com/wiki/{escapedName}>");
                     }
                 }
 
-                if (msg.Channel.Id != trackedChannelId) return;
 
-                var displayName = string.IsNullOrWhiteSpace((msg.Author as IGuildUser)?.Nickname)
-                    ? msg.Author.Username
-                    : ((IGuildUser) msg.Author).Nickname;
+                if (userMessage.Channel.Id != trackedChannelId) return;
 
-                if (msg.Attachments.Count > 0)
+                var displayName = string.IsNullOrWhiteSpace((userMessage.Author as IGuildUser)?.Nickname)
+                    ? userMessage.Author.Username
+                    : ((IGuildUser) userMessage.Author).Nickname;
+
+                if (userMessage.Attachments.Count > 0)
                 {
-                    foreach (var attachment in msg.Attachments)
+                    foreach (var attachment in userMessage.Attachments)
                     {
                         await WikiaSession.SendMessage($"{displayName}: {attachment.Url}");
                     }
                 }
 
-                if (string.IsNullOrWhiteSpace(msg.Content)) return;
+                if (string.IsNullOrWhiteSpace(userMessage.Content)) return;
 
-                await WikiaSession.SendMessage($"{displayName}: {(msg as IUserMessage)?.Resolve() ?? msg.Content}");
+                await WikiaSession.SendMessage($"{displayName}: {userMessage.Resolve()}");
             };
         }
 

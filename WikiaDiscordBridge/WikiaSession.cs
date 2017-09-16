@@ -13,7 +13,7 @@ namespace WikiaDiscordBridge
     {
         private static readonly System.Net.CookieContainer SharedCookieContainer = new System.Net.CookieContainer();
         private static readonly HttpClientHandler handler = new HttpClientHandler { CookieContainer = SharedCookieContainer };
-        
+
         private static HttpClient loginHttpClient = new HttpClient(handler);
         private static HttpClient chatHttpClient = new HttpClient(handler);
         private static HttpClient pingHttpClient = new HttpClient(handler);
@@ -24,7 +24,7 @@ namespace WikiaDiscordBridge
 
         static string botName;
         private static string wikiaName = string.Empty;
-        
+
         private static Timer pingTimer;
 
         public static async Task Init(string wikia, string username, string password)
@@ -39,9 +39,9 @@ namespace WikiaDiscordBridge
                 { "action", "login" },
                 { "lgname", username },
                 { "lgpassword", password },
-                { "format", "json" }, 
+                { "format", "json" },
             };
-            
+
 
             var response = await loginHttpClient.PostAsync("api.php", new FormUrlEncodedContent(content));
             while(!response.IsSuccessStatusCode) response = await loginHttpClient.PostAsync("api.php", new FormUrlEncodedContent(content));
@@ -93,7 +93,7 @@ namespace WikiaDiscordBridge
             loginHttpClient = new HttpClient(handler) {BaseAddress = new Uri($"http://{chatHost}/")};
             chatHttpClient = new HttpClient(handler) {BaseAddress = new Uri($"http://{chatHost}/")};
             pingHttpClient = new HttpClient(handler) {BaseAddress = new Uri($"http://{chatHost}/")};
-            
+
             var sessionIdRequest = new HttpRequestMessage(HttpMethod.Get, GetQueryString());
             foreach (var pair in ChatHeaders) sessionIdRequest.Headers.Add(pair.Key, pair.Value);
 
@@ -118,7 +118,7 @@ namespace WikiaDiscordBridge
         static async Task PingOnce()
         {
             var body = "1:2";
-            
+
             var pingRequest = new HttpRequestMessage(HttpMethod.Post, GetQueryString())
             {
                 Content = new StringContent(body, Encoding.UTF8, "text/plain")
@@ -135,7 +135,7 @@ namespace WikiaDiscordBridge
             // Strip anything that isn't a printable ASCII character.
             // ======
             // Unfortunately, this is a necessary measure because the web chat
-            // encodes (or rather, garbles) Unicode characters in some format that 
+            // encodes (or rather, garbles) Unicode characters in some format that
             // I couldn't manage to replicate. Not filtering results in Wikia immediately
             // breaking your connection (depending on what the problematic character is).
 
@@ -162,7 +162,7 @@ namespace WikiaDiscordBridge
 
             Tools.Log("Discord",$"{cleanMessage}");
             string requestBody = EncodeToRetardedFormat(@"42[""message"",""{\""id\"":null,\""cid\"":\""c2079\"",\""attrs\"":{\""msgType\"":\""chat\"",\""roomId\"":\""" + ChatRoomData["roomId"] +@"\"",\""name\"":\""" + botName + @"\"",\""text\"":\""" + cleanMessage + @"\"",\""avatarSrc\"":\""\"",\""timeStamp\"":\""\"",\""continued\"":false,\""temp\"":false}}""]");
-            
+
             var request = new HttpRequestMessage(HttpMethod.Post, GetQueryString())
             {
                 Content = new StringContent(requestBody, Encoding.UTF8, "text/plain")
@@ -185,7 +185,7 @@ namespace WikiaDiscordBridge
             {
                 var unixTime = (Int32)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
                 ChatRoomData["t"] = $"{unixTime}-0";
-                
+
                 var request = new HttpRequestMessage(HttpMethod.Get, GetQueryString());
                 foreach (var pair in ChatHeaders) request.Headers.Add(pair.Key, pair.Value);
 
@@ -193,7 +193,7 @@ namespace WikiaDiscordBridge
                 while (!response.IsSuccessStatusCode) response = await chatHttpClient.SendAsync(request);
 
                 var responseString = await response.Content.ReadAsStringAsync();
-                
+
                 if (responseString.Contains("Session ID unknown"))
                 {
                     Tools.Log("Wikia","Server returned 'session ID unknown'. Reconnecting.");
@@ -221,7 +221,7 @@ namespace WikiaDiscordBridge
                         dynamic responseDataObject = JsonConvert.DeserializeObject(responseObject[1].data.Value);
 
                         await ChatEvent(responseObject, responseDataObject);
-                    }                    
+                    }
                 }
             }
         }

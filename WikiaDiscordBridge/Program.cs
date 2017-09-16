@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 namespace WikiaDiscordBridge
 {
     class WikiaDiscordBridge
-    {        
+    {
         private static dynamic config;
         private static CancellationTokenSource cts;
 
@@ -20,7 +20,7 @@ namespace WikiaDiscordBridge
             {
                 var deserializer = new YamlDotNet.Serialization.Deserializer();
                 config = deserializer.Deserialize(streamReader);
-                                
+
                 Console.WriteLine("Successfully loaded configuration.");
             }
 
@@ -41,7 +41,7 @@ namespace WikiaDiscordBridge
             string wikiaName = config["wikia_name"];
 
             await DiscordSession.Init(botToken, discordChannel, wikiaName);
-            
+
             cts = new CancellationTokenSource(TimeSpan.FromMinutes(int.Parse(config["restart_timer"])));
             var completionSource = new TaskCompletionSource<object>();
             cts.Token.Register(() => completionSource.TrySetCanceled());
